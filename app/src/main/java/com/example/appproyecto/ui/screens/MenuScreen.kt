@@ -122,8 +122,8 @@ fun BottomNavigationBar(navController: NavHostController) {
     )
 
     NavigationBar(
-        containerColor = Color.DarkGray, // color de fondo bonito oscuro
-        tonalElevation = 8.dp, // sombra sutil
+        containerColor = Color.DarkGray,
+        tonalElevation = 8.dp,
     ) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
