@@ -161,93 +161,8 @@ data class BottomNavItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 )
 
-fun cargarContenido(): Map<String, Any> {
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
-    val db = FirebaseFirestore.getInstance()
 
-    val fechaHoy = LocalDate.now().toString()
-
-    var nombreUsuario = ""
-    var nivelUsuario = 0
-    var expUsuario = 0
-    var expMaxUsuario = 100
-
-    var misionesDelDia: List<Map<String, Any>> = emptyList()
-
-    if (userId != null) {
-        db.collection("usuarios").document(userId)
-            .get()
-            .addOnSuccessListener { document ->
-                if (document != null && document.exists()) {
-                    val nombre = document.getString("nombre") ?: ""
-                    val nivel = document.getLong("nivel")?.toInt() ?: 1
-                    val exp = document.getLong("exp")?.toInt() ?: 0
-                    val expMax = document.getLong("expMax")?.toInt() ?: 100
-                    val categoria = document.getString("categoria") ?: ""
-
-                    nombreUsuario = nombre
-                    nivelUsuario = nivel
-                    expUsuario = exp
-                    expMaxUsuario = expMax
-
-                    val rutinaId = "${userId}_$fechaHoy"
-                    val rutinaRef = db.collection("rutinas").document(rutinaId)
-
-                    rutinaRef.get().addOnSuccessListener { doc ->
-                        if (doc.exists()) {
-                            val misionesGuardadas =
-                                doc.get("misiones") as? List<Map<String, Any>> ?: emptyList()
-                            misionesDelDia = misionesGuardadas
-                            RutinaActual.misiones = misionesDelDia
-                        } else {
-                            db.collection("misiones")
-                                .whereEqualTo("categoria", categoria)
-                                .get()
-                                .addOnSuccessListener { result ->
-                                    val misiones = result.documents.shuffled().take(4)
-                                    val rutina = mapOf(
-                                        "uid" to userId,
-                                        "fecha" to fechaHoy,
-                                        "misiones" to misiones.map {
-                                            mapOf(
-                                                "id" to it.id,
-                                                "titulo" to it.getString("titulo"),
-                                                "descripcion" to it.getString("descripcion"),
-                                                "puntos" to it.getLong("puntos"),
-                                                "completada" to false
-                                            )
-                                        }
-                                    )
-                                    rutinaRef.set(rutina).addOnSuccessListener {
-                                        misionesDelDia =
-                                            rutina["misiones"] as List<Map<String, Any>>
-                                    }
-                                }
-                        }
-                    }
-
-                }
-            }
-    } else {
-        nombreUsuario = "No autenticado"
-    }
-
-    return mapOf(
-        "usuario" to mapOf(
-            "nombre" to nombreUsuario,
-            "nivel" to nivelUsuario,
-            "exp" to expUsuario,
-            "expMax" to expMaxUsuario
-        ),
-        "rutina" to mapOf(
-            "uid" to userId,
-            "fecha" to fechaHoy,
-            "misiones" to misionesDelDia
-        )
-    )
-}
-
-fun misionDestacada(misionesDelDia : List<Map<String, Any>>): Map<String, Any>{
+fun misionDestacada(misionesDelDia: List<Map<String, Any>>): Map<String, Any> {
     val misionMayorPuntaje = misionesDelDia.maxByOrNull { (it["puntos"] as? Long) ?: 0L }
 
     val id = misionMayorPuntaje?.get("id") as? String ?: "Sin id"
@@ -268,32 +183,8 @@ fun misionDestacada(misionesDelDia : List<Map<String, Any>>): Map<String, Any>{
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun MenuScreenContent(onConfirmClick: () -> Unit) {
-    val semana = listOf(4, 6, 5, 5, 5, 0, 0) // De lunes a domingo
+    val semana = listOf(4, 6, 5, 5, 5, 0, 0)
 
-    val userId = FirebaseAuth.getInstance().currentUser?.uid
-    val db = FirebaseFirestore.getInstance()
-
-    var nombreUsuario = remember { mutableStateOf("Cargando...") }
-    var nivelUsuario = remember { mutableStateOf(0) }
-    var expUsuario = remember { mutableStateOf(0) }
-    var expMaxUsuario = remember { mutableStateOf(0) }
-    val misionesDelDia = remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
-
-    var contenido = cargarContenido()
-
-    val usuario = contenido["usuario"] as? Map<String, Any>
-
-    if (usuario != null) {
-        nombreUsuario.value = usuario["nombre"] as? String ?: "Nombre no disponible"
-        nivelUsuario.value = usuario["nivel"] as? Int ?: 0
-        expUsuario.value = usuario["exp"] as? Int ?: 0
-        expMaxUsuario.value = usuario["expMax"] as? Int ?: 0
-
-        var rutina = usuario["rutina"] as? Map<String, Any>
-        var misiones = rutina?.get("misiones") as? List<Map<String, Any>> ?: emptyList()
-
-        misionesDelDia.value = misiones
-    }
 
     Box(
         modifier = Modifier
@@ -325,7 +216,7 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
 
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = nombreUsuario.value,
+                    text = "Usuario",
                     fontSize = 15.sp,
                     color = Color.White
                 )
@@ -337,7 +228,9 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
                 Text("1", fontSize = 15.sp, color = Color.White)
             }
 
-            BarraDeExperiencia(nivelUsuario.value, expUsuario.value, expMaxUsuario.value)
+
+
+            BarraDeExperiencia(5, 10, 100)
 
             Box(
                 modifier = Modifier
@@ -360,74 +253,22 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
                 )
             }
 
-            if (misionesDelDia.value.isNotEmpty()) {
-                var misionMayorPuntaje = misionDestacada(misionesDelDia.value)
+            val misionesDelDia = emptyList<Map<String, Any>>()
 
-                val id = misionMayorPuntaje["id"] as? String ?: "Sin id"
-                val titulo = misionMayorPuntaje["titulo"] as? String ?: "Sin titulo"
-                val descripcion = misionMayorPuntaje["descripcion"] as? String ?: "Sin descripcion"
-                val completadaMision = misionMayorPuntaje["completada"] as? Boolean ?: false
+            var misionMayorPuntaje = misionDestacada(misionesDelDia)
 
-                MisionDestacadaCard(
-                    titulo = titulo,
-                    descripcion = descripcion,
-                    completada = completadaMision,
-                    onCheckClicked = {
-                        /*val misionId = id
-                        val fechaHoy = LocalDate.now().toString()
-                        val rutinaId = "${userId}_$fechaHoy"
+            val id = misionMayorPuntaje["id"] as? String ?: "Sin id"
+            val titulo = misionMayorPuntaje["titulo"] as? String ?: "Sin titulo"
+            val descripcion = misionMayorPuntaje["descripcion"] as? String ?: "Sin descripcion"
+            val completadaMision = misionMayorPuntaje["completada"] as? Boolean ?: false
 
-                        val rutinaRef = db.collection("rutinas").document(rutinaId)
-                        val usuarioRef = db.collection("usuarios")
-                            .document(userId ?: return@MisionDestacadaCard)
+            MisionDestacadaCard(
+                titulo = titulo,
+                descripcion = descripcion,
+                completada = completadaMision,
+                onCheckClicked = {}
+            )
 
-                        db.runTransaction { transaction ->
-                            val rutinaSnapshot = transaction.get(rutinaRef)
-                            val usuarioSnapshot = transaction.get(usuarioRef)
-
-                            val misiones =
-                                rutinaSnapshot.get("misiones") as? List<Map<String, Any>>
-                                    ?: return@runTransaction
-                            val misionActual = misiones.find { it["id"] == misionId }
-                            val puntos = misionMayorPuntaje["puntos"] as? Long ?: 0L
-                            val yaCompletada =
-                                misionActual?.get("completada") as? Boolean ?: false
-
-                            val nuevasMisiones = misiones.map {
-                                if (it["id"] == misionId) {
-                                    val yaCompletadaIt =
-                                        it["completada"] as? Boolean ?: false
-                                    it.toMutableMap()
-                                        .apply { this["completada"] = !yaCompletadaIt }
-                                } else it
-                            }
-
-                            val expActual = usuarioSnapshot.getLong("exp") ?: 0
-                            val nuevaExp =
-                                if (yaCompletada) expActual - puntos else expActual + puntos
-
-                            transaction.update(rutinaRef, "misiones", nuevasMisiones)
-                            transaction.update(usuarioRef, "exp", nuevaExp.coerceAtLeast(0))
-
-                        }.addOnSuccessListener {
-                            // Actualizar el estado local
-                            misionesDelDia.value = misionesDelDia.value.map {
-                                if (it["id"] == misionId) it.toMutableMap().apply {
-                                    this["completada"] =
-                                        !(this["completada"] as? Boolean ?: false)
-                                } else it
-                            }
-                        }.addOnFailureListener {
-                            Log.e(
-                                "MisionDestacada",
-                                "Error al actualizar misión: ${it.message}"
-                            )
-                        }*/
-                    }
-                )
-            } else {
-                Text(text = "Cargando misión del día...", color = Color.White)
-            }
 
 
             CardMisiones(

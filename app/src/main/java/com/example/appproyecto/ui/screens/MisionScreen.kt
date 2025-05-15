@@ -64,6 +64,7 @@ import java.time.LocalTime
 import com.example.appproyecto.ui.theme.Morado
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -606,7 +607,9 @@ fun completarMision(
         val rutinaSnapshot = transaction.get(rutinaRef)
         val usuarioSnapshot = transaction.get(usuarioRef)
 
-        val misiones = rutinaSnapshot.get("misiones") as? List<Map<String, Any>> ?: throw Exception("Misiones no encontradas")
+        val misiones = rutinaSnapshot.get("misiones") as? List<Map<String, Any>> ?: throw Exception(
+            "Misiones no encontradas"
+        )
         val nuevaLista = misiones.map { mision ->
             if (mision["id"] == idMision && mision["completada"] == false) {
                 mision.toMutableMap().apply { this["completada"] = true }
@@ -624,10 +627,12 @@ fun completarMision(
         }
 
         transaction.update(rutinaRef, "misiones", nuevaLista)
-        transaction.update(usuarioRef, mapOf(
-            "exp" to nuevaExp,
-            "nivel" to nuevoNivel
-        ))
+        transaction.update(
+            usuarioRef, mapOf(
+                "exp" to nuevaExp,
+                "nivel" to nuevoNivel
+            )
+        )
 
         null
     }.addOnSuccessListener {
@@ -637,24 +642,73 @@ fun completarMision(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
+suspend fun obtenerRutinaDelDia(): List<Map<String, Any>> {
+    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return emptyList()
+    val db = FirebaseFirestore.getInstance()
+
+    val fechaHoy = LocalDate.now().toString()
+    val rutinaId = "${userId}_$fechaHoy"
+    val rutinaRef = db.collection("rutinas").document(rutinaId)
+
+    val rutinaSnapshot = rutinaRef.get().await()
+
+    return if (rutinaSnapshot.exists()) {
+        rutinaSnapshot.get("misiones") as? List<Map<String, Any>> ?: emptyList()
+    } else {
+        val userSnapshot = db.collection("usuarios").document(userId).get().await()
+        val categoria = userSnapshot.getString("categoria") ?: "general"
+
+
+        val misionesSnapshot = db.collection("misiones")
+            .whereEqualTo("categoria", categoria)
+            .get()
+            .await()
+
+        val nuevasMisiones: List<Map<String, Any>> =
+            misionesSnapshot.documents.shuffled().take(4).map { doc ->
+                mapOf(
+                    "id" to doc.id,
+                    "titulo" to (doc.getString("titulo") ?: "") as Any,
+                    "descripcion" to (doc.getString("descripcion") ?: "") as Any,
+                    "puntos" to (doc.getLong("puntos") ?: 0L) as Any,
+                    "completada" to false as Any
+                )
+            }
+
+        val rutina = mapOf(
+            "uid" to userId,
+            "fecha" to fechaHoy,
+            "misiones" to nuevasMisiones,
+            "totalAsignadas" to nuevasMisiones.size,
+            "totalCompletadas" to 0
+        )
+
+        rutinaRef.set(rutina).await()
+        nuevasMisiones
+    }
+}
 
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CardMisionDiaria() {
 
-    val misiones = RutinaActual.misiones
+    val misionesState = remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+    val checks = remember { mutableStateListOf<MutableState<Boolean>>() }
 
-    val checks = remember(misiones) {
-        mutableStateListOf<MutableState<Boolean>>().apply {
-            addAll(misiones.map {
-                mutableStateOf(it["completada"] as? Boolean ?: false)
-            })
-        }
+    LaunchedEffect(Unit) {
+        val misionesFirebase = obtenerRutinaDelDia()
+        misionesState.value = misionesFirebase
+        checks.clear()
+        checks.addAll(misionesFirebase.map {
+            mutableStateOf(it["completada"] as? Boolean ?: false)
+        })
     }
 
-    val checkFinal = checks.all { it.value }
+    val misiones = misionesState.value
 
+    val checkFinal = checks.all { it.value }
     var tiempoRestante by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -727,7 +781,7 @@ fun CardMisionDiaria() {
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "[Misión Diaria: Llegó el entrenamiento de fuerza.]",
+                text = "[Misión Diaria]",
                 color = Color.White,
                 fontSize = 13.sp
             )
@@ -821,7 +875,9 @@ fun CardMisionDiaria() {
                                 val usuarioSnapshot = transaction.get(usuarioRef)
 
 
-                                val misionesActuales = rutinaSnapshot.get("misiones") as? List<Map<String, Any>> ?: return@runTransaction
+                                val misionesActuales =
+                                    rutinaSnapshot.get("misiones") as? List<Map<String, Any>>
+                                        ?: return@runTransaction
 
                                 val nuevasMisiones = misionesActuales.map {
                                     if (it["id"] == misionId) {
@@ -834,15 +890,15 @@ fun CardMisionDiaria() {
                                 transaction.update(rutinaRef, "misiones", nuevasMisiones)
 
                                 val expActual = usuarioSnapshot.getLong("exp") ?: 0
-                                val nuevaExp = if (isChecked) expActual + puntos else expActual - puntos
+                                val nuevaExp =
+                                    if (isChecked) expActual + puntos else expActual - puntos
                                 transaction.update(usuarioRef, "exp", nuevaExp.coerceAtLeast(0))
                             }.addOnSuccessListener {
                                 checks[index].value = isChecked
                             }.addOnFailureListener {
                                 Log.e("Mision", "Error al actualizar: ${it.message}")
                             }
-                        }
-                        ,
+                        },
                         colors = CheckboxDefaults.colors(
                             checkedColor = AzulBrillante,
                             uncheckedColor = Color.White,
