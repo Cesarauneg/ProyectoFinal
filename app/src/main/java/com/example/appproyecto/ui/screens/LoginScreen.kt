@@ -249,10 +249,9 @@ fun LoginContent(onRegisterClick: () -> Unit, onMenuClick: () -> Unit) {
                 ),
                 shape = RoundedCornerShape(16.dp),
                 onClick = {
-                    // Aquí podrías validar o navegar
+
                     when {
                         correo.isBlank() || password.isBlank() -> {
-                            // Mostrar error: "Todos los campos son obligatorios"
                             Toast.makeText(
                                 context,
                                 "Todos los campos son obligatorios",

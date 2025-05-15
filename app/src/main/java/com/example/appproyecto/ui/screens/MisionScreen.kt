@@ -177,7 +177,6 @@ fun PantallaCrear() {
                 modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Título principal
                 Box {
                     Text(
                         text = "Crear contenido",
@@ -218,7 +217,6 @@ fun PantallaCrear() {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Aquí pondremos las listas de misiones y rutinas
                 Text(
                     text = "Misiones creadas",
                     color = Color.White,
@@ -231,7 +229,7 @@ fun PantallaCrear() {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp) // Altura controlada con scroll
+                        .height(180.dp)
                 ) {
                     items(10) { index ->
                         Card(
@@ -260,7 +258,6 @@ fun PantallaCrear() {
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Botón para crear misión
                 Button(
                     onClick = { mostrarFormularioMision.value = !mostrarFormularioMision.value },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0044FF)),
@@ -274,7 +271,6 @@ fun PantallaCrear() {
                         FormularioCrearMision(
                             onCrear = {
                                 mostrarFormularioMision.value = false
-                                // aquí agregas la misión si quieres
                             }
                         )
                     }
@@ -331,7 +327,6 @@ fun PantallaCrear() {
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Botón para crear rutina
                 Button(
                     onClick = { mostrarFormularioRutina.value = !mostrarFormularioRutina.value },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0044FF)),
@@ -414,7 +409,6 @@ fun FormularioCrearMision(
 
 @Composable
 fun FormularioCrearRutina() {
-    // Mini formulario para crear rutina
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -427,7 +421,7 @@ fun FormularioCrearRutina() {
         )
         Spacer(modifier = Modifier.height(12.dp))
         Button(
-            onClick = { /* Acción de crear */ },
+            onClick = {},
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00AAFF)),
             shape = RoundedCornerShape(8.dp)
         ) {
@@ -459,7 +453,6 @@ fun PantallaEditar() {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Título principal
             Box {
                 Text(
                     text = "Misiones de la semana",
@@ -500,7 +493,6 @@ fun PantallaEditar() {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Subtítulo Rutina
             Box {
                 Text(
                     text = "Rutina",
@@ -532,7 +524,6 @@ fun PantallaEditar() {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Lista de días + rutina
             diasDeLaSemana.forEachIndexed { index, dia ->
                 Row(
                     modifier = Modifier
@@ -622,7 +613,6 @@ fun completarMision(
             } else mision
         }
 
-        // Sumar experiencia
         val expActual = (usuarioSnapshot.getLong("exp") ?: 0) + puntos
         val expMax = usuarioSnapshot.getLong("expMax") ?: 100
         var nuevoNivel = usuarioSnapshot.getLong("nivel") ?: 1
@@ -655,8 +645,6 @@ fun CardMisionDiaria() {
 
     val misiones = RutinaActual.misiones
 
-    //val checks = remember { mutableStateListOf<MutableState<Boolean>>() }
-
     val checks = remember(misiones) {
         mutableStateListOf<MutableState<Boolean>>().apply {
             addAll(misiones.map {
@@ -665,13 +653,6 @@ fun CardMisionDiaria() {
         }
     }
 
-    /*if (checks.isEmpty() && misiones.isNotEmpty()) {
-        checks.addAll(misiones.map {
-            mutableStateOf(it["completada"] as? Boolean ?: false)
-        })
-    }*/
-
-    // Check final: se activa si todos los individuales están marcados
     val checkFinal = checks.all { it.value }
 
     var tiempoRestante by remember { mutableStateOf("") }
@@ -705,7 +686,6 @@ fun CardMisionDiaria() {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Título con glow
             Box {
                 Text(
                     text = "Información de la misión",

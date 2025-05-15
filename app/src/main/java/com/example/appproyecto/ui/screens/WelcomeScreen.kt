@@ -64,7 +64,6 @@ fun VideoBackground(onLoginClick: () -> Unit, onRegisterClick: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Fondo de video
         AndroidView(
             factory = {
                 PlayerView(context).apply {
@@ -76,7 +75,6 @@ fun VideoBackground(onLoginClick: () -> Unit, onRegisterClick: () -> Unit) {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Capa semitransparente y contenido encima del video
         Column(
             modifier = Modifier
                 .fillMaxSize()

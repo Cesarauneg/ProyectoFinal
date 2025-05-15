@@ -108,7 +108,6 @@ fun RegisterContent(onLoginClick: () -> Unit, onConfigClick: () -> Unit) {
                         )
                     )
                 )
-                // Texto principal, encima
                 Text(
                     text = "Level Up App",
                     fontSize = 28.sp,
@@ -338,10 +337,8 @@ fun RegisterContent(onLoginClick: () -> Unit, onConfigClick: () -> Unit) {
                 ),
                 shape = RoundedCornerShape(16.dp),
                 onClick = {
-                    // Aquí podrías validar o navegar
                     when {
                         nombre.isBlank() || correo.isBlank() || password.isBlank() || confirmPassword.isBlank() -> {
-                            // Mostrar error: "Todos los campos son obligatorios"
                             Toast.makeText(
                                 context,
                                 "Todos los campos son obligatorios",
@@ -350,7 +347,6 @@ fun RegisterContent(onLoginClick: () -> Unit, onConfigClick: () -> Unit) {
                         }
 
                         password != confirmPassword -> {
-                            // Mostrar error: "Las contraseñas no coinciden"
                             Toast.makeText(
                                 context,
                                 "Las contraseñas no coinciden",
@@ -359,7 +355,6 @@ fun RegisterContent(onLoginClick: () -> Unit, onConfigClick: () -> Unit) {
                         }
 
                         else -> {
-                            // Llamar a Firebase para registrar usuario
                             val auth = FirebaseAuth.getInstance()
                             auth.createUserWithEmailAndPassword(correo, password)
                                 .addOnCompleteListener { task ->
@@ -369,7 +364,6 @@ fun RegisterContent(onLoginClick: () -> Unit, onConfigClick: () -> Unit) {
                                             "Usuario creado correctamente",
                                             Toast.LENGTH_SHORT
                                         ).show()
-                                        // Aquí puedes navegar a otra pantalla si quieres
                                         val db = FirebaseFirestore.getInstance()
                                         val userId = FirebaseAuth.getInstance().currentUser?.uid
 

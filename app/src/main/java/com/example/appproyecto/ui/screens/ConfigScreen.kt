@@ -180,7 +180,7 @@ fun ConfigContent(onConfirmClick: () -> Unit) {
                 }
             }
         }
-        // Botón de confirmar abajo a la derecha
+
         Button(
             onClick = {
                 if (seleccion != "") {

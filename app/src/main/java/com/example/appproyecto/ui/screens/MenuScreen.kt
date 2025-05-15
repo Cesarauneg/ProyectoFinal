@@ -136,7 +136,7 @@ fun BottomNavigationBar(navController: NavHostController) {
                         item.icon,
                         contentDescription = item.title,
                         tint = if (selected) AzulBrillante else Color.LightGray,
-                        modifier = Modifier.size(if (selected) 28.dp else 24.dp) // icono más grande si seleccionado
+                        modifier = Modifier.size(if (selected) 28.dp else 24.dp)
                     )
                 },
                 label = {
@@ -225,7 +225,6 @@ fun cargarContenido(): Map<String, Any> {
                                             )
                                         }
                                     )
-                                    // Guardar rutina
                                     rutinaRef.set(rutina).addOnSuccessListener {
                                         misionesDelDia =
                                             rutina["misiones"] as List<Map<String, Any>>
@@ -381,7 +380,7 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
                     descripcion = descripcion,
                     completada = completadaMision,
                     onCheckClicked = {
-                        val misionId = id
+                        /*val misionId = id
                         val fechaHoy = LocalDate.now().toString()
                         val rutinaId = "${userId}_$fechaHoy"
 
@@ -430,23 +429,23 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
                                 "MisionDestacada",
                                 "Error al actualizar misión: ${it.message}"
                             )
-                        }
+                        }*/
                     }
                 )
             } else {
                 Text(text = "Cargando misión del día...", color = Color.White)
             }
 
-            // Secciones para misiones y progreso
+
             CardMisiones(
                 titulo = "Misiones",
                 icono = Icons.Default.Checklist,
-                onClick = { /* Navegar a pantalla de misiones */ }
+                onClick = {}
             )
 
             CardCrearMision(
                 icono = Icons.Default.AddCircle,
-                onClick = { /* Navegar a pantalla de progreso */ }
+                onClick = {}
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -508,8 +507,8 @@ fun BarraDeExperiencia(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(12.dp),
-            color = AzulBrillante, // Color personalizado
-            trackColor = Color.LightGray // Color de fondo
+            color = AzulBrillante,
+            trackColor = Color.LightGray
         )
     }
 }
@@ -656,7 +655,7 @@ fun CardCrearMision(
 @Composable
 fun WeeklyProgressGraph(
     modifier: Modifier = Modifier,
-    dailyProgress: List<Int>, // máximo 6 misiones por día
+    dailyProgress: List<Int>,
     maxMissions: Int = 6
 ) {
     val days = listOf("L", "M", "X", "J", "V", "S", "D")
