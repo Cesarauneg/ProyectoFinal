@@ -1,6 +1,7 @@
 package com.example.appproyecto.ui.screens
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -36,9 +37,11 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,17 +62,29 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.appproyecto.R
 import com.example.appproyecto.ui.navigation.Screen
 import com.example.appproyecto.ui.theme.AzulBrillante
 import com.example.appproyecto.ui.theme.AzulOscuro
 import com.example.appproyecto.ui.theme.Morado
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 import java.time.DayOfWeek
+
+sealed class MenuInterna(val ruta: String) {
+    object Principal : MenuInterna("menu_principal")
+    object MisionesDiarias : MenuInterna("misiones/Diarias")
+    object MisionesCrear : MenuInterna("misiones/Crear")
+    object MisionesEditar : MenuInterna("misiones/Editar")
+}
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -88,30 +103,31 @@ fun MenuScreen(navController: NavController) {
         ) {
             NavHost(
                 navController = internalNavController,
-                startDestination = "menu_principal"
+                startDestination = MenuInterna.Principal.ruta
             ) {
-                composable("menu_principal") {
+                composable(MenuInterna.Principal.ruta) {
                     MenuScreenContent(
-                        onConfirmClick = { navController.navigate(Screen.Menu.ruta) }
+                        navController = internalNavController
                     )
                 }
-                composable("misiones") {
-                    MisionScreen()
+
+                composable(
+                    "misiones/{tab}",
+                    arguments = listOf(navArgument("tab") { defaultValue = "Diarias" })
+                ) { backStackEntry ->
+                    val tab = backStackEntry.arguments?.getString("tab") ?: "Diarias"
+                    MisionScreen(tab)
                 }
             }
         }
     }
 }
 
-object RutinaActual {
-    var misiones: List<Map<String, Any>> = emptyList()
-}
-
 @Composable
 fun BottomNavigationBar(navController: NavHostController) {
     val items = listOf(
-        BottomNavItem("Inicio", "menu_principal", Icons.Default.Home),
-        BottomNavItem("Misiones", "misiones", Icons.Default.Checklist)
+        BottomNavItem("Inicio", MenuInterna.Principal.ruta, Icons.Default.Home),
+        BottomNavItem("Misiones", MenuInterna.MisionesDiarias.ruta, Icons.Default.Checklist),
     )
 
     NavigationBar(
@@ -119,10 +135,10 @@ fun BottomNavigationBar(navController: NavHostController) {
         tonalElevation = 8.dp,
     ) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentRoute = navBackStackEntry?.destination?.route
+        val currentRoute = navBackStackEntry?.destination?.route?.substringBefore("/")
 
         items.forEach { item ->
-            val selected = currentRoute == item.route
+            val selected = currentRoute == item.route.substringBefore("/")
             NavigationBarItem(
                 icon = {
                     Icon(
@@ -141,13 +157,14 @@ fun BottomNavigationBar(navController: NavHostController) {
                 selected = selected,
                 onClick = {
                     navController.navigate(item.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
+                        popUpTo(MenuInterna.Principal.ruta) {
+                            inclusive = false
                         }
                         launchSingleTop = true
                         restoreState = true
                     }
-                },
+                }
+                ,
                 alwaysShowLabel = true
             )
         }
@@ -161,6 +178,22 @@ data class BottomNavItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 )
 
+suspend fun obtenerDatosUsuario(): Map<String, Any> {
+    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return emptyMap()
+    val usuarioSnapshot = FirebaseFirestore.getInstance()
+        .collection("usuarios")
+        .document(userId)
+        .get()
+        .await()
+
+    return mapOf(
+        "nombre" to (usuarioSnapshot.getString("nombre") ?: "Usuario"),
+        "nivel" to (usuarioSnapshot.getLong("nivel") ?: 1),
+        "exp" to (usuarioSnapshot.getLong("exp") ?: 0),
+        "expMax" to (usuarioSnapshot.getLong("expMax") ?: 100),
+        "racha" to (usuarioSnapshot.getLong("racha") ?: 0)
+    )
+}
 
 fun misionDestacada(misionesDelDia: List<Map<String, Any>>): Map<String, Any> {
     val misionMayorPuntaje = misionesDelDia.maxByOrNull { (it["puntos"] as? Long) ?: 0L }
@@ -181,10 +214,148 @@ fun misionDestacada(misionesDelDia: List<Map<String, Any>>): Map<String, Any> {
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun MenuScreenContent(onConfirmClick: () -> Unit) {
-    val semana = listOf(4, 6, 5, 5, 5, 0, 0)
+suspend fun recalcularRachaDesdeRutinas(): Long {
+    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return 0L
+    val db = FirebaseFirestore.getInstance()
+    val usuarioRef = db.collection("usuarios").document(userId)
 
+    val hoy = LocalDate.now()
+    val diasARetroceder = 15
+
+    var racha: Long = 0
+    var ultimoDiaConMision: LocalDate? = null
+
+    for (i in 0 until diasARetroceder) {
+        val dia = hoy.minusDays(i.toLong())
+        val docId = "${userId}_$dia"
+        val snap = db.collection("rutinas").document(docId).get().await()
+
+        if (snap.exists()) {
+            val misiones = snap.get("misiones") as? List<Map<String, Any>> ?: emptyList()
+            val completadas = misiones.count { it["completada"] == true }
+
+            if (completadas > 0) {
+                if (ultimoDiaConMision == null) {
+                    ultimoDiaConMision = dia // Guardamos el último día en que completó algo
+                }
+                racha++
+            } else {
+                if (i != 0) break // Solo seguimos contando si no es hoy
+            }
+        } else {
+            if (i != 0) break
+        }
+    }
+
+    val updates = mutableMapOf<String, Any>(
+        "racha" to racha
+    )
+
+    if (ultimoDiaConMision != null) {
+        updates["ultimoDiaActivo"] = ultimoDiaConMision.toString()
+    } else {
+        updates["ultimoDiaActivo"] = FieldValue.delete()
+    }
+
+    usuarioRef.update(updates).await()
+
+    return racha
+}
+
+fun calcularNivelYExperiencia(
+    expActual: Long,
+    nivelActual: Long,
+    puntos: Long,
+): Triple<Long, Long, Long> {
+    var nuevaExp = expActual + puntos
+    var nuevoNivel = nivelActual
+    var nuevaExpMax = 100 + (nuevoNivel - 1) * 20
+
+    while (nuevaExp >= nuevaExpMax) {
+        nuevaExp -= nuevaExpMax
+        nuevoNivel += 1
+        nuevaExpMax = 100 + (nuevoNivel - 1) * 20
+    }
+
+    while (nuevaExp < 0 && nuevoNivel > 1) {
+        nuevoNivel -= 1
+        nuevaExpMax = 100 + (nuevoNivel - 1) * 20
+        nuevaExp += nuevaExpMax
+    }
+
+    nuevaExp = nuevaExp.coerceAtLeast(0)
+
+    return Triple(nuevaExp, nuevoNivel, nuevaExpMax)
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+suspend fun obtenerProgresoSemanal(): List<Int> {
+    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return emptyList()
+    val db = FirebaseFirestore.getInstance()
+
+    val hoy = LocalDate.now()
+    val primerDiaSemana = hoy.with(DayOfWeek.MONDAY)
+
+    val progreso = mutableListOf<Int>()
+
+    for (i in 0..6) {
+        val dia = primerDiaSemana.plusDays(i.toLong())
+        val docId = "${userId}_$dia"
+        val snap = db.collection("rutinas").document(docId).get().await()
+
+        val completadas = if (snap.exists()) {
+            val misiones = snap.get("misiones") as? List<Map<String, Any>> ?: emptyList()
+            misiones.count { it["completada"] == true }
+        } else 0
+
+        progreso.add(completadas)
+    }
+
+    return progreso
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun MenuScreenContent(navController: NavController) {
+    val progresoSemana = remember { mutableStateOf<List<Int>>(listOf(0, 0, 0, 0, 0, 0, 0)) }
+    val misionesState = remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+    val nombreUsuario = remember { mutableStateOf("Cargand o...") }
+    val nivelUsuario = remember { mutableStateOf(0L) }
+    val expUsuario = remember { mutableStateOf(0L) }
+    val expMaxUsuario = remember { mutableStateOf(100L) }
+    val rachaUsuario = remember { mutableStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        recalcularRachaDesdeRutinas()
+
+        val misiones = obtenerRutinaDelDia()
+        val usuario = obtenerDatosUsuario()
+
+        Log.d("MenuScreen", "Usuario datos: $usuario")
+
+        misionesState.value = misiones
+        nombreUsuario.value = usuario["nombre"] as String
+        nivelUsuario.value = usuario["nivel"] as Long
+        expUsuario.value = usuario["exp"] as Long
+        expMaxUsuario.value = usuario["expMax"] as Long
+        rachaUsuario.value = usuario["racha"] as? Long ?: 0L
+
+        progresoSemana.value = obtenerProgresoSemanal()
+    }
+
+
+    val misionesDelDia = misionesState.value
+    val misionMayorPuntaje = misionDestacada(misionesDelDia)
+
+    val misionId = misionMayorPuntaje["id"] as? String ?: return
+    val titulo = misionMayorPuntaje["titulo"] as? String ?: "Sin título"
+    val descripcion = misionMayorPuntaje["descripcion"] as? String ?: "Sin descripción"
+    val completadaMisionActualizada = misionesDelDia
+        .find { it["id"] == misionId }
+        ?.get("completada") as? Boolean ?: false
+
+
+    val coroutineScope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -210,13 +381,12 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
                 Image(
                     painterResource(R.drawable.ic_launcher_foreground),
                     "Mi Icono",
-                    modifier = Modifier
-                        .size(40.dp)
+                    modifier = Modifier.size(40.dp)
                 )
 
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = "Usuario",
+                    text = nombreUsuario.value,
                     fontSize = 15.sp,
                     color = Color.White
                 )
@@ -225,12 +395,15 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
 
                 Text("🔥", fontSize = 15.sp)
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("1", fontSize = 15.sp, color = Color.White)
+                Text("${rachaUsuario.value}", fontSize = 15.sp, color = Color.White)
             }
 
 
-
-            BarraDeExperiencia(5, 10, 100)
+            BarraDeExperiencia(
+                nivelActual = nivelUsuario.value.toInt(),
+                experienciaActual = expUsuario.value.toInt(),
+                experienciaNecesaria = expMaxUsuario.value.toInt()
+            )
 
             Box(
                 modifier = Modifier
@@ -253,33 +426,115 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
                 )
             }
 
-            val misionesDelDia = emptyList<Map<String, Any>>()
+            if (misionesDelDia.isNotEmpty()) {
+                MisionDestacadaCard(
+                    titulo = titulo,
+                    descripcion = descripcion,
+                    completada = completadaMisionActualizada,
+                    onCheckClicked = {
+                        val userId = FirebaseAuth.getInstance().currentUser?.uid
+                            ?: return@MisionDestacadaCard
+                        val fechaHoy = LocalDate.now().toString()
+                        val rutinaId = "${userId}_$fechaHoy"
+                        val db = FirebaseFirestore.getInstance()
 
-            var misionMayorPuntaje = misionDestacada(misionesDelDia)
+                        val rutinaRef = db.collection("rutinas").document(rutinaId)
+                        val usuarioRef = db.collection("usuarios").document(userId)
 
-            val id = misionMayorPuntaje["id"] as? String ?: "Sin id"
-            val titulo = misionMayorPuntaje["titulo"] as? String ?: "Sin titulo"
-            val descripcion = misionMayorPuntaje["descripcion"] as? String ?: "Sin descripcion"
-            val completadaMision = misionMayorPuntaje["completada"] as? Boolean ?: false
+                        db.runTransaction { transaction ->
+                            val rutinaSnapshot = transaction.get(rutinaRef)
+                            val usuarioSnapshot = transaction.get(usuarioRef)
 
-            MisionDestacadaCard(
-                titulo = titulo,
-                descripcion = descripcion,
-                completada = completadaMision,
-                onCheckClicked = {}
-            )
+                            val misionesActuales =
+                                rutinaSnapshot.get("misiones") as? List<Map<String, Any>>
+                                    ?: return@runTransaction
 
+                            val misionActual =
+                                misionesActuales.maxByOrNull { (it["puntos"] as? Long) ?: 0L }
+                            val idMision =
+                                misionActual?.get("id") as? String ?: return@runTransaction
+                            val puntosMision = misionActual["puntos"] as? Long ?: 0L
+                            val estabaCompletada = misionActual["completada"] as? Boolean ?: false
+
+                            val nuevasMisiones = misionesActuales.map {
+                                if (it["id"] == idMision) {
+                                    it.toMutableMap().apply {
+                                        this["completada"] = !estabaCompletada
+                                    }
+                                } else it
+                            }
+
+                            val expActual = usuarioSnapshot.getLong("exp") ?: 0L
+                            val nivelActual = usuarioSnapshot.getLong("nivel") ?: 1L
+
+                            val puntosGanados =
+                                if (!estabaCompletada) puntosMision else -puntosMision
+                            val (nuevaExp, nuevoNivel, nuevaExpMax) = calcularNivelYExperiencia(
+                                expActual = expActual,
+                                nivelActual = nivelActual,
+                                puntos = puntosGanados
+                            )
+
+                            transaction.update(rutinaRef, "misiones", nuevasMisiones)
+                            transaction.update(
+                                usuarioRef,
+                                mapOf(
+                                    "exp" to nuevaExp,
+                                    "nivel" to nuevoNivel,
+                                    "expMax" to nuevaExpMax
+                                )
+                            )
+                        }.addOnSuccessListener {
+                            Log.d("MisionDestacada", "Misión actualizada correctamente")
+
+                            coroutineScope.launch {
+                                val nuevaRacha = recalcularRachaDesdeRutinas()
+
+                                misionesState.value = obtenerRutinaDelDia()
+
+                                val usuario = obtenerDatosUsuario()
+                                expUsuario.value = usuario["exp"] as Long
+                                nivelUsuario.value = usuario["nivel"] as Long
+                                expMaxUsuario.value = usuario["expMax"] as Long
+                                rachaUsuario.value = nuevaRacha
+
+                                progresoSemana.value = obtenerProgresoSemanal()
+                            }
+                        }.addOnFailureListener {
+                            Log.e("MisionDestacada", "Error: ${it.message}")
+                        }
+                    }
+                )
+            } else {
+                Text("Cargando misión del día...", color = Color.White)
+            }
 
 
             CardMisiones(
                 titulo = "Misiones",
                 icono = Icons.Default.Checklist,
-                onClick = {}
+                onClick = {
+                    navController.navigate(MenuInterna.MisionesDiarias.ruta) {
+                        popUpTo(MenuInterna.Principal.ruta) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
+
+                }
             )
 
             CardCrearMision(
                 icono = Icons.Default.AddCircle,
-                onClick = {}
+                onClick = {
+                    navController.navigate(MenuInterna.MisionesCrear.ruta) {
+                        popUpTo(MenuInterna.Principal.ruta) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
+
+                }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -305,7 +560,7 @@ fun MenuScreenContent(onConfirmClick: () -> Unit) {
                 )
             }
 
-            WeeklyProgressGraph(dailyProgress = semana)
+            WeeklyProgressGraph(dailyProgress = progresoSemana.value)
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -490,7 +745,7 @@ fun CardCrearMision(
 fun WeeklyProgressGraph(
     modifier: Modifier = Modifier,
     dailyProgress: List<Int>,
-    maxMissions: Int = 6
+    maxMissions: Int = 4
 ) {
     val days = listOf("L", "M", "X", "J", "V", "S", "D")
     val barColor = Brush.verticalGradient(
@@ -503,7 +758,7 @@ fun WeeklyProgressGraph(
 
     val rawIndex = LocalDate.now().dayOfWeek.value % 7
     val todayIndex = if (rawIndex == 0) 6 else rawIndex
-    val diasContados = dailyProgress.take(todayIndex)
+    val diasContados = dailyProgress.take(todayIndex + 1)
     val suma = diasContados.sum()
     val maxTotal = maxMissions * diasContados.size
     val porcentaje = if (maxTotal > 0) {
@@ -582,8 +837,9 @@ fun WeeklyProgressGraph(
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
-@Preview
+@Preview(showBackground = true)
 @Composable
 fun MenuScreenPreview() {
-    MenuScreenContent(onConfirmClick = {})
+    val fakeNavController = rememberNavController()
+    MenuScreenContent(fakeNavController)
 }

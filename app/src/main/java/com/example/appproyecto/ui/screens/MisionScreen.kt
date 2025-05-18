@@ -69,9 +69,9 @@ import java.time.LocalDate
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun MisionScreen() {
+fun MisionScreen(tab: String) {
     val ventana = listOf("Diarias", "Editar", "Crear")
-    var ventanaSeleccionada by remember { mutableStateOf(ventana[0]) }
+    var ventanaSeleccionada by remember { mutableStateOf(tab) }
 
     Box(
         modifier = Modifier
@@ -591,57 +591,6 @@ fun PantallaDiarias() {
     CardMisionDiaria()
 }
 
-fun completarMision(
-    userId: String,
-    fechaHoy: String,
-    idMision: String,
-    puntos: Long,
-    onSuccess: () -> Unit,
-    onError: (Exception) -> Unit
-) {
-    val db = FirebaseFirestore.getInstance()
-    val rutinaRef = db.collection("rutinas").document("${userId}_$fechaHoy")
-    val usuarioRef = db.collection("usuarios").document(userId)
-
-    db.runTransaction { transaction ->
-        val rutinaSnapshot = transaction.get(rutinaRef)
-        val usuarioSnapshot = transaction.get(usuarioRef)
-
-        val misiones = rutinaSnapshot.get("misiones") as? List<Map<String, Any>> ?: throw Exception(
-            "Misiones no encontradas"
-        )
-        val nuevaLista = misiones.map { mision ->
-            if (mision["id"] == idMision && mision["completada"] == false) {
-                mision.toMutableMap().apply { this["completada"] = true }
-            } else mision
-        }
-
-        val expActual = (usuarioSnapshot.getLong("exp") ?: 0) + puntos
-        val expMax = usuarioSnapshot.getLong("expMax") ?: 100
-        var nuevoNivel = usuarioSnapshot.getLong("nivel") ?: 1
-        var nuevaExp = expActual
-
-        if (expActual >= expMax) {
-            nuevoNivel += 1
-            nuevaExp = expActual - expMax
-        }
-
-        transaction.update(rutinaRef, "misiones", nuevaLista)
-        transaction.update(
-            usuarioRef, mapOf(
-                "exp" to nuevaExp,
-                "nivel" to nuevoNivel
-            )
-        )
-
-        null
-    }.addOnSuccessListener {
-        onSuccess()
-    }.addOnFailureListener {
-        onError(it)
-    }
-}
-
 @RequiresApi(Build.VERSION_CODES.O)
 suspend fun obtenerRutinaDelDia(): List<Map<String, Any>> {
     val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return emptyList()
@@ -887,12 +836,19 @@ fun CardMisionDiaria() {
                                     } else it
                                 }
 
-                                transaction.update(rutinaRef, "misiones", nuevasMisiones)
+                                val expActual = usuarioSnapshot.getLong("exp") ?: 0L
+                                val nivelActual = usuarioSnapshot.getLong("nivel") ?: 1L
+                                val puntosGanados = if (isChecked) puntos else -puntos
 
-                                val expActual = usuarioSnapshot.getLong("exp") ?: 0
-                                val nuevaExp =
-                                    if (isChecked) expActual + puntos else expActual - puntos
-                                transaction.update(usuarioRef, "exp", nuevaExp.coerceAtLeast(0))
+                                val (nuevaExp, nuevoNivel, nuevaExpMax) =
+                                    calcularNivelYExperiencia(expActual, nivelActual, puntosGanados)
+
+                                transaction.update(rutinaRef, "misiones", nuevasMisiones)
+                                transaction.update(usuarioRef, mapOf(
+                                    "exp" to nuevaExp,
+                                    "nivel" to nuevoNivel,
+                                    "expMax" to nuevaExpMax
+                                ))
                             }.addOnSuccessListener {
                                 checks[index].value = isChecked
                             }.addOnFailureListener {
@@ -945,5 +901,5 @@ fun CardMisionDiaria() {
 @Preview
 @Composable
 fun MisionScreenPreview() {
-    MisionScreen()
+    MisionScreen("Diarias")
 }
