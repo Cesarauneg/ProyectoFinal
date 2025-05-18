@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -50,7 +51,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -84,6 +87,7 @@ sealed class MenuInterna(val ruta: String) {
     object MisionesDiarias : MenuInterna("misiones/Diarias")
     object MisionesCrear : MenuInterna("misiones/Crear")
     object MisionesEditar : MenuInterna("misiones/Editar")
+    object Perfil : MenuInterna("perfil")
 }
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -118,6 +122,10 @@ fun MenuScreen(navController: NavController) {
                     val tab = backStackEntry.arguments?.getString("tab") ?: "Diarias"
                     MisionScreen(tab)
                 }
+
+                composable(MenuInterna.Perfil.ruta) {
+                    PerfilScreen(navController)
+                }
             }
         }
     }
@@ -128,6 +136,7 @@ fun BottomNavigationBar(navController: NavHostController) {
     val items = listOf(
         BottomNavItem("Inicio", MenuInterna.Principal.ruta, Icons.Default.Home),
         BottomNavItem("Misiones", MenuInterna.MisionesDiarias.ruta, Icons.Default.Checklist),
+        BottomNavItem("Perfil", MenuInterna.Perfil.ruta, Icons.Default.Person),
     )
 
     NavigationBar(
@@ -319,11 +328,12 @@ suspend fun obtenerProgresoSemanal(): List<Int> {
 fun MenuScreenContent(navController: NavController) {
     val progresoSemana = remember { mutableStateOf<List<Int>>(listOf(0, 0, 0, 0, 0, 0, 0)) }
     val misionesState = remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
-    val nombreUsuario = remember { mutableStateOf("Cargand o...") }
+    val nombreUsuario = remember { mutableStateOf("Cargando...") }
     val nivelUsuario = remember { mutableStateOf(0L) }
     val expUsuario = remember { mutableStateOf(0L) }
     val expMaxUsuario = remember { mutableStateOf(100L) }
     val rachaUsuario = remember { mutableStateOf(0L) }
+    val fraseDelDia = remember { mutableStateOf("Cargando frase...") }
 
     LaunchedEffect(Unit) {
         recalcularRachaDesdeRutinas()
@@ -341,8 +351,19 @@ fun MenuScreenContent(navController: NavController) {
         rachaUsuario.value = usuario["racha"] as? Long ?: 0L
 
         progresoSemana.value = obtenerProgresoSemanal()
-    }
 
+        val userId = FirebaseAuth.getInstance().currentUser?.uid
+        val fechaHoy = LocalDate.now().toString()
+
+        if (userId != null) {
+            val rutinaId = "${userId}_$fechaHoy"
+            val db = FirebaseFirestore.getInstance()
+
+            val doc = db.collection("rutinas").document(rutinaId).get().await()
+            val frase = doc.getString("fraseDelDia") ?: "Sigue dando lo mejor de ti."
+            fraseDelDia.value = frase
+        }
+    }
 
     val misionesDelDia = misionesState.value
     val misionMayorPuntaje = misionDestacada(misionesDelDia)
@@ -506,7 +527,7 @@ fun MenuScreenContent(navController: NavController) {
                     }
                 )
             } else {
-                Text("Cargando misión del día...", color = Color.White)
+                Text("Cargando misión del día...", color = Color.White, modifier = Modifier.padding(10.dp))
             }
 
 
@@ -564,7 +585,7 @@ fun MenuScreenContent(navController: NavController) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text("\"Frase motivacional del día\"", color = Color.White, fontSize = 15.sp)
+            Text("\"${fraseDelDia.value}\"", color = Color.White, textAlign = TextAlign.Center, fontSize = 14.sp, fontStyle = FontStyle.Italic, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp))
         }
     }
 }
@@ -667,7 +688,7 @@ fun CardMisiones(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 16.dp)
+            .padding(vertical = 4.dp, horizontal = 16.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
@@ -675,7 +696,7 @@ fun CardMisiones(
     ) {
         Row(
             modifier = Modifier
-                .padding(20.dp),
+                .padding(15.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(

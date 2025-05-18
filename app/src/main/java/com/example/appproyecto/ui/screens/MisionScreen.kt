@@ -625,12 +625,19 @@ suspend fun obtenerRutinaDelDia(): List<Map<String, Any>> {
                 )
             }
 
+        val frasesSnapshot = db.collection("frases")
+            .get()
+            .await()
+
+        val fraseDelDia = frasesSnapshot.documents.shuffled().firstOrNull()
+
         val rutina = mapOf(
             "uid" to userId,
             "fecha" to fechaHoy,
             "misiones" to nuevasMisiones,
             "totalAsignadas" to nuevasMisiones.size,
-            "totalCompletadas" to 0
+            "totalCompletadas" to 0,
+            "fraseDelDia" to fraseDelDia?.getString("texto")
         )
 
         rutinaRef.set(rutina).await()
