@@ -50,6 +50,9 @@ import androidx.navigation.NavController
 import com.example.appproyecto.ui.navigation.Screen
 import com.example.appproyecto.ui.theme.*
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.firestore.FirebaseFirestore
 
 
@@ -359,11 +362,7 @@ fun RegisterContent(onLoginClick: () -> Unit, onConfigClick: () -> Unit) {
                             auth.createUserWithEmailAndPassword(correo, password)
                                 .addOnCompleteListener { task ->
                                     if (task.isSuccessful) {
-                                        Toast.makeText(
-                                            context,
-                                            "Usuario creado correctamente",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+
                                         val db = FirebaseFirestore.getInstance()
                                         val userId = FirebaseAuth.getInstance().currentUser?.uid
 
@@ -390,8 +389,15 @@ fun RegisterContent(onLoginClick: () -> Unit, onConfigClick: () -> Unit) {
 
                                         onConfigClick()
                                     } else {
-                                        val error = task.exception?.message ?: "Error al registrar"
-                                        Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                        val exception = task.exception
+                                        val errorMsg = when (exception) {
+                                            is FirebaseAuthUserCollisionException -> "Este correo ya está registrado."
+                                            is FirebaseAuthWeakPasswordException -> "La contraseña es demasiado débil."
+                                            is FirebaseAuthInvalidCredentialsException -> "El correo electrónico no es válido."
+                                            else -> exception?.message ?: "Error al registrar usuario."
+                                        }
+
+                                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                                     }
                                 }
                         }

@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
@@ -39,8 +41,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
@@ -51,11 +55,12 @@ import com.example.appproyecto.ui.theme.AzulOscuro
 import com.google.firebase.auth.FirebaseAuth
 import androidx.navigation.NavController
 import com.example.appproyecto.ui.navigation.Screen
+import com.google.firebase.auth.FirebaseAuthException
 
 @Composable
 fun LoginScreen(navController: NavController) {
-    LoginContent (
-        onRegisterClick = { navController.navigate(Screen.Register.ruta) {popUpTo(Screen.Welcome.ruta)} },
+    LoginContent(
+        onRegisterClick = { navController.navigate(Screen.Register.ruta) { popUpTo(Screen.Welcome.ruta) } },
         onMenuClick = { navController.navigate(Screen.Menu.ruta) }
     )
 }
@@ -151,6 +156,8 @@ fun LoginContent(onRegisterClick: () -> Unit, onMenuClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            val focusManager = LocalFocusManager.current
+
             OutlinedTextField(
                 value = correo,
                 onValueChange = { correo = it },
@@ -182,7 +189,13 @@ fun LoginContent(onRegisterClick: () -> Unit, onMenuClick: () -> Unit) {
                     unfocusedContainerColor = Color.Transparent
                 ),
                 shape = MaterialTheme.shapes.large,
-                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp)
+                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp),
+                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        focusManager.clearFocus() // cierra teclado
+                    }
+                ),
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -212,7 +225,11 @@ fun LoginContent(onRegisterClick: () -> Unit, onMenuClick: () -> Unit) {
                     else Icons.Default.VisibilityOff
 
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(imageVector = image, contentDescription = null, tint = if (passwordVisible) Color.White else Color.Gray)
+                        Icon(
+                            imageVector = image,
+                            contentDescription = null,
+                            tint = if (passwordVisible) Color.White else Color.Gray
+                        )
                     }
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -264,11 +281,19 @@ fun LoginContent(onRegisterClick: () -> Unit, onMenuClick: () -> Unit) {
                             auth.signInWithEmailAndPassword(correo, password)
                                 .addOnCompleteListener { task ->
                                     if (task.isSuccessful) {
-                                        Toast.makeText(context, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
                                         onMenuClick()
                                     } else {
-                                        val error = task.exception?.message ?: "Error al registrar"
-                                        Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                        val errorCode =
+                                            (task.exception as? FirebaseAuthException)?.errorCode
+
+                                        val mensajeError = when (errorCode) {
+                                            "ERROR_USER_NOT_FOUND" -> "No se encontró una cuenta con ese correo."
+                                            "ERROR_WRONG_PASSWORD" -> "La contraseña es incorrecta."
+                                            "ERROR_INVALID_EMAIL" -> "El correo electrónico no es válido."
+                                            else -> "Error al iniciar sesión. Por favor, intentalo nuevamente."
+                                        }
+                                        Toast.makeText(context, mensajeError, Toast.LENGTH_LONG)
+                                            .show()
                                     }
                                 }
                         }

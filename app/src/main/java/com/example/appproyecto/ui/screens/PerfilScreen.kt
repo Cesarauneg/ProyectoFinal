@@ -96,8 +96,18 @@ fun PerfilScreen(navController: NavController) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+
             Text(
-                "👤 ${nombreUsuario}",
+                "👤",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            Text(
+                "${nombreUsuario}",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -108,7 +118,8 @@ fun PerfilScreen(navController: NavController) {
             Text(
                 "Correo: ${user?.email}",
                 fontSize = 16.sp,
-                color = Color.White
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -116,7 +127,8 @@ fun PerfilScreen(navController: NavController) {
             Text(
                 "Categoría actual: $categoriaActual",
                 fontSize = 16.sp,
-                color = Color.White
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -219,9 +231,9 @@ fun PerfilScreen(navController: NavController) {
                     dismissButton = {
                         Button(
                             onClick = { showDialog = false },
-                            colors = ButtonDefaults.buttonColors(Color.Gray)
+                            colors = ButtonDefaults.buttonColors(Color.White)
                         ) {
-                            Text("Cancelar", color = Color.White)
+                            Text("Cancelar", color = Color.Black)
                         }
                     },
                     title = {
