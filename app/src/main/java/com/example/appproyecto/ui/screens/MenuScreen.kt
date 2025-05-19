@@ -779,7 +779,7 @@ fun WeeklyProgressGraph(
 
     val rawIndex = LocalDate.now().dayOfWeek.value % 7
     val todayIndex = if (rawIndex == 0) 6 else rawIndex
-    val diasContados = dailyProgress.take(todayIndex + 1)
+    val diasContados = dailyProgress.take(todayIndex)
     val suma = diasContados.sum()
     val maxTotal = maxMissions * diasContados.size
     val porcentaje = if (maxTotal > 0) {
